@@ -576,6 +576,12 @@ namespace NuGet.PackageManagement.VisualStudio
         {
             Debug.Assert(ThreadHelper.CheckAccess());
 
+            // if VSSolutionManager Initialization fail, _vsSolution can be null.
+            if (_vsSolution == null)
+            {
+                throw new ArgumentNullException(nameof(_vsSolution));
+            }
+
             object value;
             int hr = _vsSolution.GetProperty(propId, out value);
 
