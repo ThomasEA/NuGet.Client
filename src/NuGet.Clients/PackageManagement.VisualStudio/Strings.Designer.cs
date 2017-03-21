@@ -286,6 +286,15 @@ namespace NuGet.PackageManagement.VisualStudio {
         }
         
         /// <summary>
+        ///   Looks up a localized string similar to Failed to initialize {0}..
+        /// </summary>
+        public static string FailedToInitVsSolution {
+            get {
+                return ResourceManager.GetString("FailedToInitVsSolution", resourceCulture);
+            }
+        }
+        
+        /// <summary>
         ///   Looks up a localized string similar to Case insensitive search for reference &apos;{0}&apos;, to be removed, returned more than 1 match. Request could not be performed..
         /// </summary>
         public static string FailedToRemoveReference {

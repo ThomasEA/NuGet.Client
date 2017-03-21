@@ -5,6 +5,7 @@ using System;
 using System.Collections.Generic;
 using System.ComponentModel.Composition;
 using System.Diagnostics;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
@@ -579,7 +580,8 @@ namespace NuGet.PackageManagement.VisualStudio
             // if VSSolutionManager Initialization fail, _vsSolution can be null.
             if (_vsSolution == null)
             {
-                throw new ArgumentNullException(nameof(_vsSolution));
+                var message = string.Format(CultureInfo.CurrentCulture, Strings.FailedToInitVsSolution, nameof(_vsSolution));
+                throw new InvalidOperationException(message);
             }
 
             object value;
