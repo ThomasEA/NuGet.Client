@@ -76,6 +76,60 @@ namespace Dotnet.Integration.Test
         }
 
         [Platform(Platform.Windows)]
+        [Theory]
+        [InlineData(true)]
+        [InlineData(false)]
+        public void PackCommand_PackConsoleAppWithRID_NupkgValid(bool includeSymbols)
+        {
+            using (var testDirectory = TestDirectory.Create())
+            {
+                var projectName = "ConsoleApp1";
+                var workingDirectory = Path.Combine(testDirectory, projectName);
+                var projectFile = Path.Combine(workingDirectory, $"{projectName}.csproj");
+                // Act
+                msbuildFixture.CreateDotnetNewProject(testDirectory.Path, projectName, " console");
+
+                using (var stream = new FileStream(projectFile, FileMode.Open, FileAccess.ReadWrite))
+                {
+                    var xml = XDocument.Load(stream);
+                    ProjectFileUtils.AddProperty(xml, "RuntimeIdentifier", "win7-x64");
+
+                    ProjectFileUtils.WriteXmlToFile(xml, stream);
+                }
+
+                msbuildFixture.RestoreProject(workingDirectory, projectName, string.Empty);
+                var args = includeSymbols ? $"-o {workingDirectory} --include-symbols" : $"-o {workingDirectory}";
+                msbuildFixture.PackProject(workingDirectory, projectName, args);
+
+                var nupkgPath = includeSymbols ? 
+                    Path.Combine(workingDirectory, $"{projectName}.1.0.0.symbols.nupkg") :
+                    Path.Combine(workingDirectory, $"{projectName}.1.0.0.nupkg");
+                var nuspecPath = Path.Combine(workingDirectory, "obj", $"{projectName}.1.0.0.nuspec");
+                Assert.True(File.Exists(nupkgPath), "The output .nupkg is not in the expected place");
+                Assert.True(File.Exists(nuspecPath), "The intermediate nuspec file is not in the expected place");
+
+                using (var nupkgReader = new PackageArchiveReader(nupkgPath))
+                {
+                    // Validate the assets.
+                    var libItems = nupkgReader.GetLibItems().ToList();
+                    Assert.Equal(1, libItems.Count);
+                    Assert.Equal(FrameworkConstants.CommonFrameworks.NetCoreApp11, libItems[0].TargetFramework);
+                    if (includeSymbols)
+                    {
+                        Assert.Equal(new[] { "lib/netcoreapp1.1/ConsoleApp1.dll",
+                            "lib/netcoreapp1.1/ConsoleApp1.pdb",
+                            "lib/netcoreapp1.1/ConsoleApp1.runtimeconfig.json" }, libItems[0].Items);
+                    }
+                    else
+                    {
+                        Assert.Equal(new[] { "lib/netcoreapp1.1/ConsoleApp1.dll", "lib/netcoreapp1.1/ConsoleApp1.runtimeconfig.json" }, libItems[0].Items);
+                    }
+                }
+
+            }
+        }
+
+        [Platform(Platform.Windows)]
         [Fact]
         public void PackCommand_PackProject_SupportMultipleFrameworks()
         {
@@ -116,8 +170,7 @@ namespace Dotnet.Integration.Test
                     ProjectFileUtils.WriteXmlToFile(xml, stream);
                 }
 
-                // This is a hack to make restore work with <TargetFrameworks> . Once we update the CLI_TEST in our repo, we can remove this.
-                msbuildFixture.RestoreProject(workingDirectory, projectName, "/p:RestoreProjectStyle=PackageReference");
+                msbuildFixture.RestoreProject(workingDirectory, projectName, string.Empty);
 
                 // Act
                 msbuildFixture.PackProject(workingDirectory, projectName, $"-o {workingDirectory}");

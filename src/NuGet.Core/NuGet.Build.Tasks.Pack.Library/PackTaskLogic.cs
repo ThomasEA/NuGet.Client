@@ -33,8 +33,8 @@ namespace NuGet.Build.Tasks.Pack
                 NoPackageAnalysis = request.NoPackageAnalysis,
                 PackTargetArgs = new MSBuildPackTargetArgs
                 {
-                    TargetPathsToAssemblies = GetTargetPathsToAssemblies(request),
-                    TargetPathsToSymbols = request.TargetPathsToSymbols,
+                    TargetPathsToAssemblies = InitLibFiles(request.BuildOutputInPackage),
+                    TargetPathsToSymbols = InitLibFiles(request.TargetPathsToSymbols),
                     AssemblyName = request.AssemblyName,
                     IncludeBuildOutput = request.IncludeBuildOutput,
                     BuildOutputFolder = request.BuildOutputFolder,
@@ -200,19 +200,48 @@ namespace NuGet.Build.Tasks.Pack
             runner.BuildPackage();
         }
 
-        private string[] GetTargetPathsToAssemblies(IPackTaskRequest<IMSBuildItem> request)
+        private IEnumerable<OutputLibFile> InitLibFiles(IMSBuildItem[] libFiles)
         {
-            if (request.TargetPathsToAssemblies == null)
+            var assemblies = new List<OutputLibFile>();
+            if (libFiles == null)
             {
-                return new string[0];
+                return assemblies;
             }
 
-            return request.TargetPathsToAssemblies
-                .Where(path => path != null)
-                .Select(path => path.Trim())
-                .Where(path => path != string.Empty)
-                .Distinct()
-                .ToArray();
+
+            foreach (var assembly in libFiles)
+            {
+                var finalOutputPath = assembly.GetProperty("FinalOutputPath");
+                var targetPath = assembly.GetProperty("TargetPath");
+                var targetFramework = assembly.GetProperty("TargetFramework");
+
+                if (!File.Exists(finalOutputPath))
+                {
+                    throw new FileNotFoundException(string.Format(CultureInfo.CurrentCulture, Strings.Error_FileNotFound, finalOutputPath));
+                }
+
+                // If target path is not set, default it to the file name. Only satellite DLLs have a special target path
+                // where culture is part of the target path. This condition holds true for files like runtimeconfig.json file
+                // in netcore projects.
+                if (targetPath == null)
+                {
+                    targetPath = Path.GetFileName(finalOutputPath);
+                }
+
+                if (string.IsNullOrEmpty(targetFramework) || NuGetFramework.Parse(targetFramework).IsSpecificFramework == false)
+                {
+                    throw new InvalidOperationException(string.Format(CultureInfo.CurrentCulture, Strings.InvalidTargetFramework, finalOutputPath));
+                }
+                
+                assemblies.Add(new OutputLibFile()
+                {
+                    FinalOutputPath = finalOutputPath,
+                    TargetPath = targetPath,
+                    TargetFramework = targetFramework
+                });
+            }
+
+            return assemblies;
         }
 
         private ISet<NuGetFramework> ParseFrameworks(IPackTaskRequest<IMSBuildItem> request)

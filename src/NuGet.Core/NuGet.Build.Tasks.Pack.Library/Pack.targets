@@ -33,6 +33,7 @@ Copyright (c) .NET Foundation. All rights reserved.
     <ContentTargetFolders Condition="'$(ContentTargetFolders)' == ''">content;contentFiles</ContentTargetFolders>
     <PackDependsOn>GenerateNuspec; $(PackDependsOn)</PackDependsOn>
     <IsInnerBuild Condition="'$(TargetFramework)' != '' AND '$(TargetFrameworks)' != ''">true</IsInnerBuild>
+    <TargetsForPackageOutput>$(TargetsForPackageOutput)</TargetsForPackageOutput>
     <NoBuild Condition="'$(GeneratePackageOnBuild)' == 'true'">true</NoBuild>
   </PropertyGroup>
   <PropertyGroup Condition="'$(NoBuild)' == 'true' ">
@@ -93,8 +94,8 @@ Copyright (c) .NET Foundation. All rights reserved.
       <NuGetPackInput Include="$(MSBuildAllProjects)"/>
       <NuGetPackInput Include="@(_PackageFiles)"/>
       <NuGetPackInput Include="@(_PackageFilesToExclude)"/>
-      <NuGetPackInput Include="@(_TargetPathsToAssemblies->'%(FinalOutputPath)')"/>
-      <NuGetPackInput Include="@(_TargetPathsToSymbols)"/>
+      <NuGetPackInput Include="@(BuildOutputInPackage->'%(FinalOutputPath)')"/>
+      <NuGetPackInput Include="@(_TargetPathsToSymbols->'%(FinalOutputPath)')"/>
       <NuGetPackInput Include="@(_SourceFiles)"/>
       <NuGetPackInput Include="@(_References)"/>
       <NuGetPackOutput Include="$(RestoreOutputAbsolutePath)$(PackageId).$(PackageVersion).nuspec"/>
@@ -144,7 +145,7 @@ Copyright (c) .NET Foundation. All rights reserved.
               IconUrl="$(PackageIconUrl)"
               ReleaseNotes="$(PackageReleaseNotes)"
               Tags="$(PackageTags)"
-              TargetPathsToAssemblies="@(_TargetPathsToAssemblies->'%(FinalOutputPath)')"
+              BuildOutputInPackage="@(BuildOutputInPackage)"
               TargetPathsToSymbols="@(_TargetPathsToSymbols)"
               TargetFrameworks="@(_TargetFrameworks)"
               AssemblyName="$(AssemblyName)"
@@ -193,21 +194,19 @@ Copyright (c) .NET Foundation. All rights reserved.
     <MSBuild
       Condition="'$(IncludeBuildOutput)' == 'true'"
       Projects="$(MSBuildProjectFullPath)"
-      Targets="BuiltProjectOutputGroup;DocumentationProjectOutputGroup;_AddPriFileToPackBuildOutput"
-      Properties="TargetFramework=%(_TargetFrameworks.Identity);
-                  BuildProjectReferences=false;">
+      Targets="_GetBuildOutputFilesWithTfm;$(TargetsForPackageOutput)"
+      Properties="TargetFramework=%(_TargetFrameworks.Identity);">
 
       <Output
           TaskParameter="TargetOutputs"
-          ItemName="_TargetPathsToAssemblies" />
+          ItemName="BuildOutputInPackage" />
     </MSBuild>
     
     <MSBuild
       Condition="'$(IncludeSymbols)' == 'true' OR '$(IncludeSource)' == 'true'"
       Projects="$(MSBuildProjectFullPath)"
-      Targets="DebugSymbolsProjectOutputGroup"
-      Properties="TargetFramework=%(_TargetFrameworks.Identity);
-                  BuildProjectReferences=false;">
+      Targets="_GetDebugSymbolsWithTfm"
+      Properties="TargetFramework=%(_TargetFrameworks.Identity);">
 
       <Output
           TaskParameter="TargetOutputs"
@@ -227,6 +226,35 @@ Copyright (c) .NET Foundation. All rights reserved.
     </MSBuild>
   </Target>
   
+  <Target Name="_GetBuildOutputFilesWithTfm"
+          DependsOnTargets="BuiltProjectOutputGroup;DocumentationProjectOutputGroup;SatelliteDllsProjectOutputGroup;_AddPriFileToPackBuildOutput;"
+          Returns="@(_TargetPathsToAssembliesWithTfm)">
+    <ItemGroup>
+      <_TargetPathsToAssembliesWithTfm Include="@(SatelliteDllsProjectOutputGroupOutput)">
+        <TargetFramework>$(TargetFramework)</TargetFramework>
+      </_TargetPathsToAssembliesWithTfm>
+      <_TargetPathsToAssembliesWithTfm Include="@(BuiltProjectOutputGroupOutput)">
+        <TargetFramework>$(TargetFramework)</TargetFramework>
+      </_TargetPathsToAssembliesWithTfm>
+      <_TargetPathsToAssembliesWithTfm Include="@(DocumentationProjectOutputGroupOutput)">
+        <TargetFramework>$(TargetFramework)</TargetFramework>
+      </_TargetPathsToAssembliesWithTfm>
+      <_TargetPathsToAssembliesWithTfm Include="@(_PathToPriFile)">
+        <TargetFramework>$(TargetFramework)</TargetFramework>
+      </_TargetPathsToAssembliesWithTfm>
+    </ItemGroup>
+  </Target>
+
+  <Target Name="_GetDebugSymbolsWithTfm"
+          DependsOnTargets="DebugSymbolsProjectOutputGroup"
+          Returns="@(_TargetPathsToSymbolsWithTfm)">
+    <ItemGroup>
+      <_TargetPathsToSymbolsWithTfm Include="@(DebugSymbolsProjectOutputGroupOutput)">
+        <TargetFramework>$(TargetFramework)</TargetFramework>
+      </_TargetPathsToSymbolsWithTfm>
+    </ItemGroup>
+  </Target>
+  
   <!--Projects with target framework like UWP, Win8, wpa81 produce a Pri file
     in their bin dir. This Pri file is not included in the BuiltProjectGroupOutput, and
     has to be added manually here.-->
@@ -235,6 +263,7 @@ Copyright (c) .NET Foundation. All rights reserved.
     <ItemGroup Condition="'$(IncludeProjectPriFile)' == 'true'">
       <_PathToPriFile Include="$(ProjectPriFullPath)">
         <FinalOutputPath>$(ProjectPriFullPath)</FinalOutputPath>
+        <TargetPath>$(ProjectPriFileName)</TargetPath>
       </_PathToPriFile>
     </ItemGroup>
   </Target>
